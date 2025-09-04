@@ -1,0 +1,37 @@
+name: Deploy Production 🚀
+on:
+  release:
+    types: [published, edited]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy to production via SSH
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST_PRODUCTION }}
+          username: ${{ secrets.SSH_USER_NAME_PRODUCTION }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_PRODUCTION }}
+          script: |
+            set -e
+            TAG=${{ github.event.release.tag_name }}
+            APP_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/pacmusic
+            cd ${{ secrets.APP_PROD_PATH }} || git clone ${{ secrets.GIT_URL }} ${{ secrets.APP_PROD_PATH }}
+            git -C ${{ secrets.APP_PROD_PATH }} fetch --all
+            git -C ${{ secrets.APP_PROD_PATH }} reset --hard origin/main
+            # Write .env (production)
+            cat > ${{ secrets.APP_PROD_PATH }}/.env <<'EOF'
+MINIO_PROD_ENDPOINT=${{ secrets.MINIO_PROD_ENDPOINT }}
+MINIO_PROD_ACCESS_KEY=${{ secrets.MINIO_PROD_ACCESS_KEY }}
+MINIO_PROD_SECRET_KEY=${{ secrets.MINIO_PROD_SECRET_KEY }}
+APP_PROD_PORT=${{ secrets.APP_PROD_PORT }}
+APP_IMAGE=${APP_IMAGE}
+APP_TAG=${TAG}
+EOF
+            cd ${{ secrets.APP_PROD_PATH }}
+            sudo docker pull ${APP_IMAGE}:${TAG}
+            sudo docker compose up --build --detach pacmusic-prod
+            sleep 5
+            curl -f http://localhost:${{ secrets.APP_PROD_PORT }}
