@@ -1,33 +1,37 @@
-name: Deploy Staging 🚀
+name: Deploy Staging 
+
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: staging
+
     steps:
-      - name: Deploy to staging via SSH
-        uses: appleboy/ssh-action@v0.1.6
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Copy files to staging server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST_STAGING }}
+          username: ${{ secrets.SSH_USER_NAME_STAGING }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_STAGING }}
+          source: "."
+          target: "/home/ubuntu/staging/Mentoring-DevOps---Pacmusic"
+
+      - name: Run docker compose in staging
+        uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SSH_HOST_STAGING }}
           username: ${{ secrets.SSH_USER_NAME_STAGING }}
           key: ${{ secrets.SSH_PRIVATE_KEY_STAGING }}
           script: |
-            set -e
-            cd ${{ secrets.APP_STG_PATH }} || git clone ${{ secrets.GIT_URL }} ${{ secrets.APP_STG_PATH }}
-            git -C ${{ secrets.APP_STG_PATH }} fetch --all
-            git -C ${{ secrets.APP_STG_PATH }} reset --hard origin/main
-            # write .env on server staging from secrets
-            cat > ${{ secrets.APP_STG_PATH }}/.env <<'EOF'
-MINIO_STG_ENDPOINT=${{ secrets.MINIO_STG_ENDPOINT }}
-MINIO_STG_ACCESS_KEY=${{ secrets.MINIO_STG_ACCESS_KEY }}
-MINIO_STG_SECRET_KEY=${{ secrets.MINIO_STG_SECRET_KEY }}
-APP_STG_PORT=${{ secrets.APP_STG_PORT }}
-EOF
-            cd ${{ secrets.APP_STG_PATH }}
-            sudo docker compose pull || true
-            sudo docker compose up --build --detach pacmusic-stg
-            sleep 5
-            curl -f http://localhost:${{ secrets.APP_STG_PORT }}
+            cd /home/ubuntu/staging/Mentoring-DevOps---Pacmusic
+            docker compose up -d --build pacmusic-stg
+
+      - name: Test endpoint staging
+        run: curl -f ${{ secrets.STG_URL }}
